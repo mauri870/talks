@@ -1,0 +1,120 @@
+# Contributing to the Go project
+Jumpstarting Your Contributions to Go
+Summary: The basics of contributing to the Go project, including how to get started, how to submit changes, and how to review changes from others.
+Tags: contributing, go, open source
+
+19 Fev 2024
+Mauri de Souza Meneguzzo
+mauri870@gmail.com
+https://github.com/mauri870
+
+## About me
+
+- BTech in IT, Postgrad in Data Science and AI, Cybersecurity
+- Distributed Systems, Cloud Computing, AI
+- Currently a part of Meisterwerk Gmbh, a Berlin startup
+- Open source contributor (go, rqlite, llvm)
+- Member of the Go open source team
+- Working on the runtime, assembler, cgo, race detector and atomic packages
+- Official maintainer of sync/atomic and runtime/internal/atomic
+- Lots of assembly!
+- Bugfixes and optimizations
+- Code Reviews, Gardening issues
+
+## Let's Go!
+
+Let's start by getting the Go source and compiling the go command (gotip):
+
+    $ git clone github.com/golang/go
+    $ export GOBOOTSTRAP=/usr/local/go-bootstrap # 1.4 or later!
+    $ export GOROOT=$HOME/projects/go
+    $ cd $HOME/projects/go
+    $ (cd src; bash ./make.bash) # or ./all.bash for tests
+    $ export PATH=$PATH:$GOROOT/bin
+    $ go version
+    go version devel go1.23-af5943f90c Sat Feb 17 23:25:55 2024 +0000 darwin/arm64
+
+- Issues, proposals, discussions (GitHub) - [go.dev/issues](https://go.dev/issues)
+- Code reviews (Gerrit) - [go-review.googlesource.com](https://go-review.googlesource.com/)
+- Code - [go.googlesource.com/go](https://go.googlesource.com/go)
+
+## Github vs Gerrit workflow
+
+- The recommended way to contribute is to use a Gerrit account.
+- You can still use your github account and open a github MR
+- Accept the [Google CLA](https://cla.developers.google.com/clas)
+- Gopherbot (good bot!) will take care of syncing the changes to Gerrit
+- Your MR will be closed if it's submitted in Gerrit
+
+## Submitting a change
+
+Let's look at an example, a bugfix for issue [#64651](https://github.com/golang/go/issues/64651):
+- Github PR - [https://github.com/golang/go/pull/64653](https://github.com/golang/go/pull/64653)
+    - The commit message should contain a "Fixes #64651" line
+- Gerrit CL - [https://go-review.googlesource.com/c/go/+/548895](https://go-review.googlesource.com/c/go/+/548895)
+    - Reviewers will leave comments and you can address them
+    - At least two Google Employees must approve the change (+1, +2)
+    - Trybots/LUCI will run the tests and report the results
+    - Once approved, the change will be submitted (merged)
+    - The Github PR will be closed and the issue will be closed automatically
+- If the fix needs to be backported, the change will be cherry picked
+
+
+## Downloading gotip 
+
+You can use the `gotip` command to run the latest version of Go without compiling it. This is useful for testing, debugging and finding bugs during the development cycle.
+
+    $ go install golang.org/dl/gotip@latest
+    $ gotip download
+    $ gotip version
+    go version devel go1.23-af5943f9 Sat Feb 17 23:25:55 2024 +0000 darwin/arm64
+
+This also works with specific versions!
+
+    $ go install golang.org/dl/go1.22.0@latest
+    $ go1.22.0 download
+    $ go1.22.0 version
+    go version go1.22.0 darwin/arm64
+
+From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
+
+    $ GOTOOLCHAIN=go1.22.0 go run .
+
+## How it is like to be a member of the Go open source team?
+
+- To make matters clear, I am not a member of the Google Go team.
+- Nothing really changes, I'm just a regular contributor after all.
+- You tend to participate more in discussions, code reviews, proposals.
+- A trusted member has more privileges, such as:
+    - spin up builders to test specific arches (gomote)
+    - run CI pipelines (Trybots, LUCI)
+    - gardening of issues (triage, assign, close, etc)
+    - approval and submit (merge) CLs
+
+.image images/joined-go.png _ 850
+
+## Some contributions I made
+
+- New net/http apis - ServeFileFS, FileServerFS, NewFileTransportFS
+- PCALIGN support for the amd64 assembler. I was able to get string and bytes Index 20% faster and Count 50% faster in some scenarios.
+- internal/msan and internal/asan packages
+- archive/tar and archive/zip AddFS methods
+- New regexp syntax for named matches `(?<name>...)`
+- cgo fixes around clang and gcc
+- New sync/atomic bitwise AND and OR operators, including assembly code for all supported architectures
+- Many fixes and improvements
+
+## Useful links
+
+Check out [Go's Contributing guide](https://go.dev/doc/contribute).
+
+Compiling [Go from source](https://go.dev/doc/install/source).
+
+Visit [the Go home page](https://golang.org/).
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.godoc.org/github.com/mauri870/talks/contributing.slide](https://talks.godoc.org/github.com/mauri870/talks/contributing.slide)
+
+.image images/contributing-qr.png
+
