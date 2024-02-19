@@ -21,7 +21,12 @@ https://github.com/mauri870
 - Bugfixes and optimizations
 - Code Reviews, Gardening issues
 
-## Let's Go!
+##
+
+.image images/gopherswrench.jpg _ 800
+**Let's Go!**
+
+## Compiling Go from source
 
 Let's start by getting the Go source and compiling the go command (gotip):
 
@@ -78,7 +83,17 @@ This also works with specific versions!
 
 From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 
-    $ GOTOOLCHAIN=go1.22.0 go run .
+    $ go version
+    go version devel go1.23-af5943f90c Sat Feb 17 23:25:55 2024 +0000 darwin/arm64
+    $ GOTOOLCHAIN=go1.22.0 go version
+    go version go1.22.0 darwin/arm64
+
+## There are other ways to contribute
+
+- Documentation
+- More tests, benchs, examples
+- Issue triaging
+- Code reviews
 
 ## How it is like to be a member of the Go open source team?
 
@@ -91,7 +106,7 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
     - gardening of issues (triage, assign, close, etc)
     - approval and submit (merge) CLs
 
-.image images/joined-go.png _ 850
+.image images/joined-go.png _ 700
 
 ## Some contributions I made
 
