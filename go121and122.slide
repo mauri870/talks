@@ -1,0 +1,220 @@
+# What's new in Go 1.21 and 1.22
+Tags: go, open source
+
+19 Fev 2024
+Mauri de Souza Meneguzzo
+mauri870@gmal.com
+https://github.com/mauri870
+
+## About me
+
+- BTech in IT, Postgrad in Data Science and AI, Cybersecurity
+- Distributed Systems, Cloud Computing, AI
+- Currently a part of Meisterwerk Gmbh, a Berlin startup
+- Open source contributor (Go, rqlite, LLVM)
+- Member of the Go open source team
+- Working on the runtime, assembler, cgo, sanitizers, race and atomic packages
+- Official maintainer of sync/atomic and runtime/internal/atomic
+- Lots of assembly!
+- Bugfixes and optimizations
+- Code Reviews, Gardening issues
+
+## Let's Go!
+
+.image images/gocowboy.png _ 500
+
+## Go builds are now reproducible
+
+- Go 1.21 is the first release to have reproducible builds
+
+## Supply Chain Attacks
+
+[https://xkcd.com/2347/](https://xkcd.com/2347/)
+
+.image images/xkcd-dependencies.png _ 400
+
+
+## VulnCheck v1.0.0
+
+- [Go checksum database](https://sum.golang.org/)
+- [Go vulnerability database](https://vuln.go.dev/)
+
+govulncheck cmd 
+
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+    govulncheck ./...
+
+    Vulnerability #1: GO-2023-2102
+     HTTP/2 rapid reset can cause excessive work in net/http
+        More info: https://pkg.go.dev/vuln/GO-2023-2102
+        Module: golang.org/x/net
+            Found in: golang.org/x/net@v0.10.0
+            Fixed in: golang.org/x/net@v0.17.0
+            Example traces found:
+            #1: main.go:34:16: server.main calls gin.Engine.Run, which eventually calls
+            http2.Server.ServeConn
+
+## Go Toolchains
+
+    $ go version
+    go version devel go1.23-af5943f90c Sat Feb 17 23:25:55 2024 +0000 darwin/arm64
+    $ go env -w GOTOOLCHAIN=go1.22.0
+    $ go version
+    go version go1.22.0 darwin/arm64
+
+## GOOS=wasip1 port
+
+- Webassembly System Interface Preview 1
+- Can be run with a server-side WASI runtime like wasmtime, wasmer, wazero
+- [Preview 2 just released](https://github.com/WebAssembly/WASI/blob/main/preview2/README.md), Go will have a wasip2 port at some point
+- Wasm is single-threaded, no parallelism
+- no support for network sockets
+- @golang/wasm team is now focused on the wasm32 port
+- Wasm is Currently limited to 2^16 functions
+
+## Profile Guided Optimization
+
+- PGO for short
+- Compiler optimization, uses pprof profiles
+- PGO improves performance of Go programs by around 2-7%
+- Can dramatically increase goroutine stack size [https://github.com/golang/go/issues/65532](https://github.com/golang/go/issues/65532)
+- Similar to the race detector, it can only optimize the code that is executed in the profile
+- default.pgo, should be in version control!
+
+## How to capture a profile?
+
+    # tests or benchmarks
+    go test -cpuprofile=cpu.prof -bench=. .
+
+    # net/http/pprof
+    go tool pprof http://localhost:6060/debug/pprof/profile
+
+    # runtime/pprof
+    pprof.StartCPUProfile(f)
+    defer pprof.StopCPUProfile()
+
+
+## Iterator Proposal
+
+## Range over integer
+
+.play code/rangeoverint.go /START OMIT/,/END OMIT/
+
+    func BenchA(b *testing.B) {
+        for i := 0; i < b.N; i++ {
+            // ...
+        }
+    }
+
+    func BenchB(b *testing.B) {
+        for range b.N {
+            // ...
+        }
+    }
+
+
+
+## Range over func, aka iterators
+
+- requires GOEXPERIMENT=rangefunc
+- various stdlib packages will have iterator support
+- additions to slices are currently frozen, in favor of iterators
+
+iter.Seq/iter.Seq2
+
+    package iter // import "iter"
+
+    // Seq is an iterator over sequences of individual values.
+    // When called as seq(yield), seq calls yield(v) for each value v 
+    // in the sequence, stopping early if yield returns false.
+    type Seq[V any] func(yield func(V) bool)
+
+    // Seq2 is an iterator over sequences of pairs of values, most commonly
+    // key-value pairs. When called as seq(yield), seq calls yield(k, v) for each
+    // pair (k, v) in the sequence, stopping early if yield returns false.
+    type Seq2[K, V any] func(yield func(K, V) bool)
+
+##
+
+.play code/iter.go
+
+## Dead Code Elimination
+
+[Go Blog about deadcode](https://go.dev/blog/deadcode)
+
+    $ go install golang.org/x/tools/cmd/deadcode@latest
+    $ deadcode ./...
+
+
+## log/slog
+
+- Logrus, Zap, and other loggers are very popular
+- Structured logging
+- Jonathan Amsterdam has an excelent talk about it in the [GopherCon 23](https://www.youtube.com/watch?v=8rnI2xLrdeM)
+
+##
+
+    # implicit, simpler syntax
+    slog.Info("User logged in", "username", user.Name, "userid", user.ID)
+
+    # explicit, less memory allocs
+    slog.LogAttrs(context.Background(), slog.LevelInfo, "User logged in",
+        slog.String("username", user.Name), slog.Int("userid", user.ID))
+
+    # zap for comparison
+    zapLogger.Info("User logged in",
+        zap.String("username", user.Name),
+        zap.Int("userid", user.ID))
+
+
+## math/rand/v2
+
+First V2 package in the stdlib
+
+Read removed. Many people misused math/rand.Read as a secure random source instead of crypto/rand.Read
+
+Outdated, slow algorithms in math/rand
+
+    //go:linkname Uint32 runtime.fastrand
+    func Uint32() uint32
+
+    //go:linkname Uint32n runtime.fastrandn
+    func Uint32n(n uint32) uint32
+
+## net/http Routing enhancements
+
+    http.Handle("GET /posts/{id}", handlePost2)
+    // ...
+    idString := req.PathValue("id") 
+
+## Go 2 when?
+
+##
+
+- Generics!
+- Go 1.18 was the biggest change the language saw and will ever see
+- [Go compatibility promise](https://go.dev/doc/go1compat)
+
+## Go 1.23 so far
+
+- GOARCH=wasm32 port
+- new sync/atomic apis (And/Or, atomic Pair)
+- stabilization of the iterator proposal
+- more iterator support in the stdlib (strings, bytes, slices, maps)
+- ongoing work on a [SwissTable implementation for maps](https://github.com/golang/go/issues/54766#issuecomment-1950760241)
+- extend zero-copy io to more types (WriteTo, ReadFrom)
+- stronger affinity between G ↔ P ↔ M ↔ CPU
+- The tree reopened a month ago, stay tuned for more
+
+## Useful links
+
+The [Go home page](https://golang.org/).
+
+[Go blog](https://go.dev/blog/)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.godoc.org/github.com/mauri870/talks/go121and122.slide](https://talks.godoc.org/github.com/mauri870/talks/go121and122.slide)
+
+.image images/go121and122-qr.png
+

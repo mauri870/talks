@@ -94,6 +94,7 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - More tests, benchs, examples
 - Issue triaging
 - Code reviews
+- Go release policy supports the last two versions
 
 ## How it is like to be a member of the Go open source team?
 
