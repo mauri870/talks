@@ -1,0 +1,100 @@
+# Golang Race Detector
+Understanding how -race works
+Tags: race, go, golang, concurrency
+
+19 Fev 2024
+Mauri de Souza Meneguzzo
+mauri870@gmail.com
+https://github.com/mauri870
+
+## Introduction
+
+Go has an interesting piece of engineering  called the Race Detector
+
+The race detector is a runtime instrumentation based on [LLVM’s Thread Sanitizer(tsan)](https://clang.llvm.org/docs/ThreadSanitizer.html).
+
+It works by instrumenting reads and writes to memory with calls to tsan at runtime to catch race conditions in code, but what is a race condition?
+
+## Race conditions
+
+A race condition happens when concurrent code mutates a shared state without syncronization. With how easy Go makes to run separate goroutines for multiple tasks, it can happen that sometimes we forget to syncronize access to shared state.
+
+## 
+
+.play code/racy.go /START OMIT/,/END OMIT/
+
+[Playground link](https://go.dev/play/p/e3dCrUSATGz?v=gotip)
+
+## 
+
+This simple program spawns 10 goroutines where each one does some work and then pushes a result to a slice, it then prints the slice and the length at the end of the program.
+
+Before running this, what do you think is going to happen? Probably you expect it to print a slice of 10 elements with the elements in a random order. Try to run it:
+
+```txt
+[18 0 2 4 6 8 10 12 14 16]
+10
+```
+
+That looks good! Except it doesn’t. If you try running it enough times it starts to behave weirdly:
+
+```
+[18 4 2]
+3
+
+[18 8 10 12 14 0]
+6
+
+// ... and so on
+```
+
+## 
+
+That is because there is no syncronization on the `append` call, the different goroutines race against eachother mutating the slice and that is undefined behavior that lead to memory corruption and the program misbehaving.
+
+That can easily be fixed by using some kind of syncronization measure on the critical section, like a sync.Mutex for example:
+
+```go
+mu.Lock()
+s = append(s, ii)
+mu.Unlock()
+```
+
+There is no way to catch this issue at compile time since this kind of race condition is not apparent from lexical analysis alone. Fortunately for us there is a way to detect these cases with the Go race detector at runtime.
+
+##  The Race Detector
+
+If you try the above example locally with `go build -race main.go && ./main`, you should see something like this:
+
+    ==================
+    WARNING: DATA RACE
+    Write at 0x00c0000ae018 by goroutine 7:
+    main.main.func1()
+        /tmp/main.go:21 +0xfc
+    main.main.gowrap1()
+        /tmp/main.go:22 +0x44
+
+    Previous read at 0x00c0000ae018 by goroutine 6:
+    main.main.func1()
+        /tmp/main.go:21 +0x7c
+    main.main.gowrap1()
+        /tmp/main.go:22 +0x44
+    ... ommited for brevity ...
+
+## It's not all sunshine and rainbows
+
+The disadvantage of the race detector is that it is very slow. It links and calls into tsan at runtime increasing the cpu usage by ~30%.
+So definitely not well suited to run in production, specially since race conditions trigger a panic.
+
+The race detector can only detect races in code that it actually executes, if you have a race condition in a branch of code that is not executed, it will not be detected.   
+
+There is also the option to run `go test` with `-race` as well.
+
+## Useful links
+
+[Introducing the Go Race Detector](https://go.dev/blog/race-detector)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.godoc.org/github.com/mauri870/talks/contributing.slide](https://talks.godoc.org/github.com/mauri870/talks/racedetector.slide)
+
