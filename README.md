@@ -10,4 +10,10 @@ go install golang.org/x/tools/cmd/present@latest
 present
 ```
 
-You can also find the slides online at https://talks.godoc.org/github.com/mauri870/talks/x.slide, where x is the name of the talk.
+You can start a server running at `localhost:4000` where you can see the slides:
+
+```bash
+go run .
+```
+
+You can also find the slides online at https://talks.mauri870.com.
