@@ -5,7 +5,7 @@ talks.mauri870.com
 This site contains my presentations stored on [[https://github.com/mauri870/talks][GitHub]] in the
 [[https://godoc.org/golang.org/x/tools/present][golang.org/x/tools/present]] format.
 
-This page itself is [[https://github.com/mauri870/talks/assets/home.article][an article]].
+This page itself is [[https://github.com/mauri870/talks/blob/main/assets/home.article][an article]].
 
 I hope you enjoy the presentations I have prepared.
 

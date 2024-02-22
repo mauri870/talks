@@ -1,6 +1,6 @@
 module github.com/mauri870/talks
 
-go 1.23
+go 1.22
 
 require (
 	github.com/yuin/goldmark v1.7.0 // indirect
