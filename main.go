@@ -32,8 +32,8 @@ func main() {
 	http.Handle("/", handlerFunc(serveRoot))
 	http.Handle("/compile", handlerFunc(serveCompile))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./present/static"))))
-	http.Handle("/code/", http.StripPrefix("/code/", http.FileServer(http.Dir("./code"))))
-	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("./images"))))
+	http.Handle("/code/", http.StripPrefix("/code/", http.FileServer(http.Dir("./_content/code"))))
+	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("./_content/images"))))
 	http.HandleFunc("/play.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./present/play.js")
 	})
@@ -74,9 +74,13 @@ func loadHomeArticle() []byte {
 		panic(err)
 	}
 
-	slides, err := filepath.Glob("./*.slide")
+	slides, err := filepath.Glob("./_content/*.slide")
 	if err != nil {
 		panic(err)
+	}
+
+	for i, s := range slides {
+		slides[i] = filepath.Base(s)
 	}
 
 	var buf bytes.Buffer
@@ -143,17 +147,20 @@ func servePresentation(w http.ResponseWriter, r *http.Request) error {
 	filename := filepath.Base(r.URL.Path[1:])
 
 	if !strings.HasSuffix(filename, ".article") && !strings.HasSuffix(filename, ".slide") {
-		w.WriteHeader(404)
-		return nil
+		return ErrNotFound
+	}
+
+	if filename == "" || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return ErrNotFound
 	}
 
 	parser := &present.Context{
 		ReadFile: func(name string) ([]byte, error) {
-			return os.ReadFile(name)
+			return os.ReadFile("./_content/" + name)
 		},
 	}
 
-	f, err := os.Open(filename)
+	f, err := os.Open("./_content/" + filename)
 	if err != nil {
 		return ErrNotFound
 	}
