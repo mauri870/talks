@@ -96,17 +96,18 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - More tests, benchs, examples
 - Issue triaging
 - Code reviews
+- Issues with [help-wanted label](https://github.com/golang/go/issues?q=is%3Aopen+label%3A%22help+wanted%22%2C%22Proposal-Accepted%22+-commenter%3Agopherbot+)
 - Go release policy supports the last two versions
 
 ## Go ecosystem
 
 - Language, compiler, stdlib - [https://github.com/golang/go](https://github.com/golang/go)
-- x packages
-    - x/tools
-    - x/crypto
-    - x/sys
-    - x/net
-    - x/website
+- x packages have their own repositories
+    - x/tools - [https://github.com/golang/tools](https://github.com/golang/tools)
+    - x/crypto - [https://github.com/golang/crypto](https://github.com/golang/crypto)
+    - x/sys - [https://github.com/golang/sys](https://github.com/golang/sys)
+    - x/net - [https://github.com/golang/net](https://github.com/golang/net)
+    - x/website - [https://github.com/golang/website](https://github.com/golang/website)
 
 ## How it is like to be a member of the Go open source team?
 
