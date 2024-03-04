@@ -3,7 +3,7 @@ Jumpstarting Your Contributions to Go
 Summary: The basics of contributing to the Go project, including how to get started, how to submit changes, and how to review changes from others.
 Tags: contributing, go, open source
 
-19 Fev 2024
+4 Mar 2024
 Mauri de Souza Meneguzzo
 mauri870@gmail.com
 https://github.com/mauri870
@@ -34,10 +34,12 @@ Let's start by getting the Go source and compiling the go command (gotip):
     $ export GOBOOTSTRAP=/usr/local/go-bootstrap # 1.4 or later!
     $ export GOROOT=$HOME/projects/go
     $ cd $HOME/projects/go
-    $ (cd src; bash ./make.bash) # or ./all.bash for tests
+    $ (cd src; bash ./make.bash) # or ./all.bash for tests (go tool dist test)
     $ export PATH=$PATH:$GOROOT/bin
     $ go version
     go version devel go1.23-af5943f90c Sat Feb 17 23:25:55 2024 +0000 darwin/arm64
+
+## Boards
 
 - Issues, proposals, discussions (GitHub) - [go.dev/issues](https://go.dev/issues)
 - Code reviews (Gerrit) - [go-review.googlesource.com](https://go-review.googlesource.com/)
@@ -96,6 +98,16 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - Code reviews
 - Go release policy supports the last two versions
 
+## Go ecosystem
+
+- Language, compiler, stdlib - [https://github.com/golang/go](https://github.com/golang/go)
+- x packages
+    - x/tools
+    - x/crypto
+    - x/sys
+    - x/net
+    - x/website
+
 ## How it is like to be a member of the Go open source team?
 
 - To make matters clear, I am not a member of the Google Go team.
@@ -118,7 +130,8 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - New regexp syntax for named matches `(?<name>...)`
 - cgo fixes around clang and gcc
 - New sync/atomic bitwise AND and OR operators, including assembly code for all supported architectures
-- Many fixes and improvements
+- General fixes and improvements
+- [https://go-review.googlesource.com/q/author:mauri870@gmail.com](https://go-review.googlesource.com/q/author:mauri870@gmail.com)
 
 ## Useful links
 
