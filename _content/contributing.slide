@@ -11,7 +11,7 @@ https://github.com/mauri870
 ## About me
 
 - BTech in IT, Postgrad in Data Science and AI, Cybersecurity
-- Distributed Systems, Cloud Computing, AI
+- Distributed Systems, Cloud Computing, Kubernetes, AI
 - Currently a part of Meisterwerk Gmbh, a Berlin startup
 - Open source contributor (go, rqlite, llvm)
 - Member of the Go open source team
@@ -42,8 +42,12 @@ Let's start by getting the Go source and compiling the go command (gotip):
 ## Boards
 
 - Issues, proposals, discussions (GitHub) - [go.dev/issues](https://go.dev/issues)
+- The Go issues page is not for asking questions or general discussion, [Go Questions](https://go.dev/wiki/Questions)
 - Code reviews (Gerrit) - [go-review.googlesource.com](https://go-review.googlesource.com/)
-- Code - [go.googlesource.com/go](https://go.googlesource.com/go)
+- Source Code - [go.googlesource.com/go](https://go.googlesource.com/go)
+- Code Owners - [dev.golang.org/owners](https://dev.golang.org/owners)
+- Go build dashboard - [build.golang.org](https://build.golang.org/)
+- Perf dashboard - [perf.golang.org](https://perf.golang.org/dashboard/?benchmark=all)
 
 ## Github vs Gerrit workflow
 
@@ -95,6 +99,9 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - Documentation
 - More tests, benchs, examples
 - Issue triaging
+    - making sure the issue is reproducible and well described
+    - check for duplicates, affected versions, platforms, etc
+    - notify a group (@golang/compiler, @golang/runtime, @golang/crypto, etc)
 - Code reviews
 - Issues with [help-wanted label](https://github.com/golang/go/issues?q=is%3Aopen+label%3A%22help+wanted%22%2C%22Proposal-Accepted%22+-commenter%3Agopherbot+)
 - Go release policy supports the last two versions
@@ -129,10 +136,14 @@ From 1.21 onwards there is [GOTOOLCHAIN](https://go.dev/doc/toolchain):
 - internal/msan and internal/asan packages
 - archive/tar and archive/zip AddFS methods
 - New regexp syntax for named matches `(?<name>...)`
-- cgo fixes around clang and gcc
+- cgo fixes around clang and gcc support
 - New sync/atomic bitwise AND and OR operators, including assembly code for all supported architectures
 - General fixes and improvements
 - [https://go-review.googlesource.com/q/author:mauri870@gmail.com](https://go-review.googlesource.com/q/author:mauri870@gmail.com)
+
+## My first contribution
+
+[CL 511295 - reflect: panic on recv channel close](https://go-review.googlesource.com/c/go/+/511295)
 
 ## Useful links
 
@@ -141,6 +152,8 @@ Check out [Go's Contributing guide](https://go.dev/doc/contribute).
 Compiling [Go from source](https://go.dev/doc/install/source).
 
 Visit [the Go home page](https://golang.org/).
+
+[Asking questions about Go](https://go.dev/wiki/Questions)
 
 My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
 
