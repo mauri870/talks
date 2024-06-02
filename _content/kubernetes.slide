@@ -1,0 +1,203 @@
+# Kubernetes
+Production grade container orchestration
+Tags: kubernetes, cloud
+
+24 May 2019
+Mauri de Souza Meneguzzo
+mauri870@gmail.com
+https://github.com/mauri870
+
+## 
+
+.image https://avatars1.githubusercontent.com/u/13629408?v=4&s=400 _ 500
+
+**Kubernetes** aka **k8s** aka **kube**
+
+## What is kubernetes?
+
+- Created by Google
+- Open Source
+- Previously known as **Borg** internally at Google
+- Written in Go
+- Deploy, scale and manage distributed components across a cluster of nodes
+- A cloud of microservices
+- Focus on the application, not the infraestructure
+- It helps in moving from host-centric infrastructure to container-centric infrastructure
+- Runs on top of docker or rkt
+
+## Features of Kubernetes
+
+- Continuous development, integration and deployment
+- Containerized infrastructure
+- Application-centric management
+- Auto-scalable infrastructure
+- Environment consistency across development testing and production
+- Loosely coupled infrastructure, where each component can act as a separate unit
+- Higher density of resource utilization
+- Predictable infrastructure that is going to be created
+
+## Kubernetes cluster
+Nodes
+- Virtual or physical machines
+- Minimum 1 node
+- Must run some version of Linux x86_64
+- Apiserver needs at least 1 core / 1GB RAM
+
+Network
+- Kubernetes allocates an IP for each Pod / Service
+- Need **max-pods-per-node * max-number-of-nodes** IPs in total. A /24 per node supports 254 pods per machine and is a common choice. If IPs are scarce, a /26 (62 pods per machine) or even a /27 (30 pods) may be sufficient.
+- Need ipv4 forwarding sysctl(net.ipv4.ip_forward = 1)
+- Firewall rules to allow access to the apiserver ports 80 and/or 443
+
+## Cluster Architecture
+
+Kubernetes Master
+
+- **Etcd:** Stores the configuration information which can be used by each of the nodes in the cluster. It is accessible only by Kubernetes API server as it may have some sensitive information. It is a distributed key value Store which is accessible to all.
+- **API Server:** Kubernetes is an API server which provides all the operation on cluster using the API.
+- **Controller Manager:** This component is responsible for most of the collectors that regulates the state of cluster and performs a task.
+- **Scheduler:** Responsible for distributing the workload, tracking utilization of working load on cluster nodes and then placing the workload on which resources are available.
+
+## Kubernetes Node - Minion
+
+- **Docker/Rkt:** Helps in running encapsulated application containers in a lightweight environment.
+- **Kubelet:** Small service in each node for relaying information to and from control plane service. Mantains the state of work and the node server
+- **Kubernetes Proxy:** Helps in making services available to the external host, forward requests to the correct containers and acts as a primitive load balancer.
+
+## Cluster Architecture
+
+.image images/kube-cluster-arch.jpg _ 500
+
+## Namespaces
+
+- Help pod-to-pod communication using the same namespace
+- Provide virtual clusters on top of the physical cluster
+- Logic separation between teams and environments
+- Avoid conflicts on service names
+
+```bash
+kubectl run nginx --image=nginx
+kubectl describe deployment nginx
+kubectl delete deployment nginx
+kubectl run nginx --image=nginx --namespace=my-namespace
+kubectl describe deployment nginx
+```
+
+## Pods, Kubernetes Work Units
+
+- The basic unit that Kubernetes deals with
+- Generally represents one or more containers that should be controlled as a single "application"
+- Share the environment, storage and network
+- Should not store any persistent state since they can be destroyed and recreated at any time
+- Each pod has its own ip address
+- Can be created and destroyed as needed
+- Single container / Multi container / Sidecar
+
+## Jobs
+
+Run one or more pods and tracks its progress. Kubernetes ensures that the specified number of pods are completed successfully.
+
+Scheduled Job
+- Scheduling a job will run a pod at a specified point in time
+- A periodic job is created for it which invokes itself automatically
+
+## Service
+
+- A logical set of pods
+- Provide a single IP and DNS to access the pods
+
+Types of Services
+
+- **ClusterIP:** Expose the service within the kubernetes cluster
+- **NodePort:** Expose the servce on a static port on the deployed node
+- **LoadBalancer:** Use the cloud provider's load balancer
+
+## Labels & Selectors
+
+Labels
+- Key/Value pair attached to pods, RCs and services
+- Identify attributes for objects
+- Can be added at creation time or modified at run time
+
+Selectors
+- Provide uniqueness
+- Used to select a set of objects
+- Equality-based Selectors allow filtering by key and value. Matching objects should satisfy all the specified labels
+- Set-based Selectors allow filtering of keys according to a set of values
+
+```bash
+kubectl get pods -l "app=myWebServer"
+```
+
+## Replication Controller
+
+- Manage the pod lifecycle
+- Responsible for making sure that a number of pod replicas are running at a given point in time
+- Capability to bring up or down the specified no of pods
+
+## Replica Sets
+
+- Ensure a certain number of replicas of a pod are running at any given time
+- Can be considered as a replacement for replication controller
+- The key difference between the replica set and the replication controller is, the replication controller only supports equality-based selector whereas the replica set supports set-based selector
+
+## Deployments
+
+- Upgraded and higher version of Replication Controller
+- Manage the deployment of replica sets
+- Capable of upgrading the replica set and rollback to a previous version
+
+```bash
+kubectl run nginx --image=nginx
+kubectl get deployments
+kubectl set image deployment/nginx nginx=nginx:1.9.1
+kubectl rollout status deployment nginx
+kubectl rollout history deployment nginx
+kubectl rollout history deployment nginx --revision=1
+kubectl rollout undo deployment nginx
+```
+
+## Volumes
+
+- A directory accessible to the containers in a pod
+- Similar to volumes in Docker, but a volume is very much limited to a particular pod(when a pod life ends, the volume was also lost)
+
+Types of Volumes
+- **emptyDir:** Remains active as long as the Pod is running on a node
+- **hostPath:** Mounts file/dir from the host node filesystem into the pod
+- **gcePersistentDisk**
+- **awsElasticBlockStore**
+- **nfs, iscsi, flocker, glusterfs, rdb, cephfs, gitRepo, secret, azureDiskVolume**
+
+## Persistent Volume and Volume Claim
+
+Persistent Volume
+- A piece of network storage that has been provisioned by the administrator
+
+Persistent Volume Claim
+- The storage requested by Kubernetes
+- The user does not need to known the underlying provisioning. Must be created in the same namespace of the pod
+
+## Secrets
+
+- Kubernetes objects used to store sensitive data
+- Can be created from yaml or txt files
+- Use Config Maps for not-secret data
+
+Using Secrets
+- Environment Variables
+- Volume
+
+## Ingress
+
+- Collection of rules that allow inbound connections to reach the cluster services
+- Can be configured to expose service URLs, load balance traffic, terminate SSL, offer name based virtual hosting
+
+## Useful links
+
+[k8s.io](https://k8s.io/).
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
+

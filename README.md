@@ -7,7 +7,7 @@ The slides can be built using `golang.org/x/tools/present`:
 
 ```bash
 go install golang.org/x/tools/cmd/present@latest
-present
+cd _content && present
 ```
 
 You can start a server running at `localhost:4000` where you can see the slides:
