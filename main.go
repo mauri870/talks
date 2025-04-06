@@ -79,12 +79,18 @@ func loadHomeArticle() []byte {
 		panic(err)
 	}
 
-	for i, s := range slides {
-		slides[i] = filepath.Base(s)
+	articles, err := filepath.Glob("./_content/*.article")
+	if err != nil {
+		panic(err)
+	}
+
+	pages := append(articles, slides...)
+	for i, s := range pages {
+		pages[i] = filepath.Base(s)
 	}
 
 	var buf bytes.Buffer
-	tmpl.Execute(&buf, slides)
+	tmpl.Execute(&buf, pages)
 
 	doc, err := present.Parse(&buf, fname, 0)
 	if err != nil {
