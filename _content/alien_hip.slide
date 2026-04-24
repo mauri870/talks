@@ -109,37 +109,39 @@ The build script sets up the ROCm environment and pins the architecture:
 
 CUDA-OpenGL interop lets kernels write directly into an OpenGL texture on the GPU without a round-trip through CPU memory.
 
-The approach for AMD uses a different extension path:
+AMD does not support `hipGraphicsGLRegisterImage`. The port uses a Pixel Buffer Object (PBO) instead:
 
-    // CUDA path: cudaGraphicsGLRegisterImage
-    cudaGraphicsResource* resource;
-    cudaGraphicsGLRegisterImage(&resource, texId,
-        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+    // CUDA: register the texture directly
+    cudaGraphicsGLRegisterImage(&res, texId, GL_TEXTURE_2D,
+        cudaGraphicsRegisterFlagsWriteDiscard);
 
-    // HIP/AMD path: gl_sharing extension, then hipGraphicsGLRegisterImage
-    // Requires EGL or GLX context with the AMD interop extension enabled
-    hipGraphicsResource* resource;
-    hipGraphicsGLRegisterImage(&resource, texId,
-        GL_TEXTURE_2D, hipGraphicsRegisterFlagsWriteDiscard);
+    // HIP/AMD: register a PBO, copy rendered data into it, upload via GL
+    hipGraphicsGLRegisterBuffer(&res, pboId, hipGraphicsRegisterFlagsNone);
+    hipGraphicsMapResources(1, &res, 0);
+    hipGraphicsResourceGetMappedPointer(&pboPtr, &size, res);
+    hipMemcpy(pboPtr, imageData, size, hipMemcpyDeviceToDevice);
+    hipGraphicsUnmapResources(1, &res, 0);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
-The AMD path needs the context to be created with `AMD_gpu_association` active.
-Fallback: copy the render buffer from VRAM to system RAM, then upload as a texture — slower but it works everywhere.
+`hipGLGetDevices()` selects the HIP device that shares the current OpenGL context.
 
 ## Tuning for RDNA 3
 
 RDNA 3 wavefront size is 32 (same as NVIDIA warp). GCN was 64; some legacy AMD code assumes 64.
 
-The kernel launch parameters were already tuned for 32-thread warps, so no changes needed there.
+The main tuning change was reducing `numBlocks` in `GpuSettings.h`:
 
-Block sizes for the physics kernels:
+    // Before (tuned for NVIDIA)
+    int numBlocks = 16384;
 
-    // Physics update: one thread per particle cluster
-    dim3 block(NUM_THREAD_BLOCKS, 1);
-    dim3 grid(cudaBlockCount(numObjects, NUM_THREAD_BLOCKS), 1);
+    // After (tuned for RDNA 3)
+    int numBlocks = 1024;
 
-`NUM_THREAD_BLOCKS` defaults to 64, fine for both NVIDIA and RDNA 3.
+All physics kernels are launched as:
 
-Adjusting `--num-blocks` at runtime lets you tune for your specific GPU.
+    func<<<gpuSettings.numBlocks, 8>>>(...);
+
+8 threads per block keeps each wavefront slot flexible; `numBlocks` controls total occupancy.
 
 ## Result
 
