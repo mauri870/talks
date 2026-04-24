@@ -1,0 +1,170 @@
+# ALIEN on AMD GPUs
+Porting an artificial life simulator from CUDA to ROCm/HIP
+Summary: How I ported ALIEN, a particle-physics artificial life simulator, from CUDA to ROCm/HIP so it runs on AMD GPUs — covering hipify, manual fixups, CMake changes, and OpenGL interop.
+Tags: gpu, cuda, rocm, hip, c++, artificial life
+
+24 Apr 2026
+Mauri de Souza Meneguzzo
+https://github.com/mauri870
+
+## What is ALIEN?
+
+**A**rtificial **LI**fe **EN**vironment.
+
+A 2D particle physics simulation where digital organisms evolve, replicate, and compete.
+
+- Soft bodies and fluids via a specialized particle engine
+- Organisms are particle networks upgraded with sensors, muscles, neural nets
+- Genomes encode body plans; offspring inherit and mutate them
+- Simulations run with millions of particles in real time
+
+The simulation kernel runs entirely on the GPU. Every particle update, collision, and cell-function evaluation happens in a CUDA (now HIP) kernel.
+
+Winner of the ALIFE 2024 Virtual Creatures Competition.
+
+## ALIEN in action
+
+.image images/alien-sim.jpg _ 800
+
+[Watch on YouTube](https://www.youtube.com/watch?v=qwbMGPkoJmg)
+
+## The problem: CUDA is NVIDIA-only
+
+The upstream ALIEN requires an NVIDIA GPU with compute capability 6.0+.
+
+I have an AMD RX 7900 XTX with 24 GB of VRAM. It speaks ROCm/HIP, not CUDA.
+
+Automatic translation tools exist, such as [SCALE](https://scale-lang.com/) and [ZLUDA](https://github.com/vosen/ZLUDA).
+
+The goal: port ALIEN source code to HIP and compile/run natively on AMD GPUs, with no runtime behaviour changes.
+
+## CUDA vs HIP
+
+HIP is AMD's portability layer. It mirrors the CUDA API almost exactly.
+
+    CUDA                      HIP
+    ------------------------  ------------------------
+    cudaMalloc                hipMalloc
+    cudaMemcpy                hipMemcpy
+    __syncthreads()           __syncthreads()
+    cudaDeviceSynchronize     hipDeviceSynchronize
+    .cu / .cuh                .hip / .hip.h
+
+The semantics are the same. The namespaces differ.
+
+HIP compiles to either NVIDIA (`nvcc` backend) or AMD (`hipcc` via ROCm).
+With `__HIP_PLATFORM_AMD__` defined, you target ROCm.
+
+## hipify-perl
+
+AMD ships `hipify-perl`, a Perl script that mechanically translates CUDA source to HIP.
+
+    #!/usr/bin/env bash
+    find source -type f \( -name "*.cu" -o -name "*.cuh" \) | while read -r file; do
+        hipify-perl --inplace "$file"
+        case "$file" in
+            *.cu)  mv "$file" "${file%.cu}.hip"   ;;
+            *.cuh) mv "$file" "${file%.cuh}.hip.h" ;;
+        esac
+    done
+
+This handles the mechanical part: namespace prefixes, type names, function names.
+
+After running it, ALIEN had `.hip` kernel files where there were `.cu` files.
+
+## What hipify cannot do
+
+hipify handles the easy cases. The hard cases are manual.
+
+- **CUDA-OpenGL interop**: `cudaGraphicsGLRegisterImage`, `cudaGraphicsMapResources`, etc. — these are NVIDIA-only extension paths. AMD has its own `hipGraphicsGLRegisterImage` but the semantics and extension string differ.
+- **Wavefront vs warp size**: NVIDIA warps are 32 threads. AMD wavefronts are 64 threads on GCN, 32 on RDNA. Block sizes tuned for 32 need adjustment.
+- **Cooperative groups**: some CUDA cooperative group APIs have no direct HIP equivalent.
+- **Device function qualifiers**: some `__device__` / `__host__` combinations behave differently under `hipcc`.
+
+## CMake changes
+
+The upstream CMakeLists used `LANGUAGES CUDA`. HIP needs its own language declaration:
+
+    # Before
+    project(alien-project LANGUAGES C CXX CUDA)
+
+    # After
+    project(alien-project LANGUAGES C CXX HIP)
+
+And the compile definition that tells HIP which platform we target:
+
+    add_compile_definitions(__HIP_PLATFORM_AMD__)
+
+The build script sets up the ROCm environment and pins the architecture:
+
+    cmake \
+        -S . -B build \
+        -DCMAKE_MODULE_PATH=/opt/rocm/lib/cmake/hip \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_HIP_ARCHITECTURES="gfx1100"
+
+`gfx1100` is the shader model for the RX 7900 XTX (RDNA 3).
+
+## OpenGL interop
+
+CUDA-OpenGL interop lets kernels write directly into an OpenGL texture on the GPU without a round-trip through CPU memory.
+
+The approach for AMD uses a different extension path:
+
+    // CUDA path: cudaGraphicsGLRegisterImage
+    cudaGraphicsResource* resource;
+    cudaGraphicsGLRegisterImage(&resource, texId,
+        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+
+    // HIP/AMD path: gl_sharing extension, then hipGraphicsGLRegisterImage
+    // Requires EGL or GLX context with the AMD interop extension enabled
+    hipGraphicsResource* resource;
+    hipGraphicsGLRegisterImage(&resource, texId,
+        GL_TEXTURE_2D, hipGraphicsRegisterFlagsWriteDiscard);
+
+The AMD path needs the context to be created with `AMD_gpu_association` active.
+Fallback: copy the render buffer from VRAM to system RAM, then upload as a texture — slower but it works everywhere.
+
+## Tuning for RDNA 3
+
+RDNA 3 wavefront size is 32 (same as NVIDIA warp). GCN was 64; some legacy AMD code assumes 64.
+
+The kernel launch parameters were already tuned for 32-thread warps, so no changes needed there.
+
+Block sizes for the physics kernels:
+
+    // Physics update: one thread per particle cluster
+    dim3 block(NUM_THREAD_BLOCKS, 1);
+    dim3 grid(cudaBlockCount(numObjects, NUM_THREAD_BLOCKS), 1);
+
+`NUM_THREAD_BLOCKS` defaults to 64, fine for both NVIDIA and RDNA 3.
+
+Adjusting `--num-blocks` at runtime lets you tune for your specific GPU.
+
+## Result
+
+ALIEN compiles and runs on an RX 7900 XTX with ROCm (CMake 3.31, ROCm 7.2).
+
+Benchmark on the default simulation with an RX 7900 XTX:
+
+    500 time steps, 2934 ms → 170.4 TPS  (CLI)
+    ~130 TPS, ~40 FPS @ 4K              (GUI)
+    ~200 TPS                             (GUI, rendering disabled with ALT+I)
+
+- 2.4× faster than the SCALE automatic-translation version (130 vs 53 TPS)
+- OpenGL interop works via the AMD extension path
+- Port targets the 4.x stable branch (September 2024)
+
+## Useful links
+
+[github.com/mauri870/alien](https://github.com/mauri870/alien) (this fork)
+
+[chrxh/alien](https://github.com/chrxh/alien) (upstream ALIEN)
+
+[ROCm HIP documentation](https://rocm.docs.amd.com/projects/HIP/en/latest/)
+
+[HIPIFY tools](https://github.com/ROCm/HIPIFY)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
