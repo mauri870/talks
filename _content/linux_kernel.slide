@@ -1,0 +1,137 @@
+# linux-mauri870
+Building a custom gaming kernel optimized for dual-CCD AMD X3D processors
+Tags: linux, kernel, gaming, amd, performance, patches
+
+5 Nov 2025
+Mauri de Souza Meneguzzo
+
+## Why a custom kernel?
+
+The mainline kernel is general-purpose. It makes conservative choices to work well on servers, embedded devices, VMs, and desktops equally.
+
+A gaming workstation has a very different profile:
+- Latency matters more than throughput
+- The GPU driver needs low-jitter interrupt delivery
+- Proton/Wine games do things the scheduler was not designed for
+
+## The AMD 9950X3D architecture
+
+The Ryzen 9 9950X3D has two dies (CCDs), each with 8 cores.
+
+**CCD0**: lower clocks, but carries the 3D V-Cache 96 MB of L3 stacked on top of the silicon. Games with large working sets (shader caches, mesh data) run faster here.
+
+**CCD1**: higher clocks, less cache. Better for single-threaded burst workloads.
+
+**The problem**: the kernel treats all cores as equal. OS tasks, IRQs, and game threads land anywhere. When IRQs land on X3D cores, they interrupt the game thread and can flush cache state.
+
+## The tickless solution
+
+Linux's `NO_HZ_FULL` makes a CPU core stop generating timer ticks when exactly one task is running on it.
+
+No ticks = no periodic interrupts = the game thread runs uninterrupted.
+
+Boot parameters for the 9950X3D:
+
+    nohz_full=1-7,16-23
+    rcu_nocbs=1-7,16-23
+    irqaffinity=8-15,24-31
+
+X3D cores (CCD0) run tickless. IRQs are pinned to CCD1 cores.
+The game scheduler sees its X3D cores free of OS jitter.
+
+## BORE scheduler
+
+[BORE — Burst-Oriented Response Enhancer](https://github.com/firelzrd/bore-scheduler) patches the CFS scheduler to track burst history per task.
+
+Tasks that historically run in short bursts (UI threads, game engines, audio) get priority over long-running CPU-bound tasks.
+
+Games stutter when the scheduler pulls a background compile job onto a core mid-frame.
+BORE reduces this by keeping bursty tasks preemptable and responsive.
+
+Combined with `PREEMPT_FULL` and 1000 Hz tick rate, context switches happen at sub-millisecond granularity.
+
+## BBR3 TCP congestion control
+
+[BBR3](https://github.com/google/bbr/tree/v3) is Google's bandwidth-delay product congestion controller.
+
+Stock kernels ship with CUBIC. BBR3 is not in mainline yet.
+
+For gaming, BBR3 matters when:
+- Playing online games with variable network conditions
+- Streaming gameplay
+- Downloading large game updates concurrently with playing
+
+BBR3 tracks bandwidth and RTT independently. It does not back off on loss like CUBIC does, leading to better throughput under congested or lossy links.
+
+## Compiler: Clang + ThinLTO + -O3
+
+The kernel is built with Clang 22 instead of GCC.
+
+Benefits:
+- Better integration with LLVM Polly (polyhedral loop optimizer)
+- ThinLTO: link-time optimization across translation units without the full LTO memory cost
+- `-march=native`: emit instructions for the exact microarchitecture of the build machine
+- `CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE`: `-O3` instead of `-O2`
+
+Polly restructures loop nests for better cache locality and can auto-parallelize inner loops.
+For the scheduler hot paths and memory management code, this yields measurable improvements.
+
+Build time: ~15–20 minutes on the 9950X3D itself.
+
+## Patch: HDMI FRL (4K@144Hz)
+
+[HDMI Fixed Rate Link](https://github.com/mkopec/linux/tree/hdmi_frl) is required for HDMI 2.1 bandwidth (48 Gbps).
+
+Without it, AMD GPUs top out at 4K@60Hz over HDMI. With it, 4K@144Hz works.
+
+The patch adds FRL negotiation to the `amdgpu` DRM driver. It's not in mainline because the spec is partially proprietary and testing coverage is limited.
+
+## Patch: keep foreground workloads in VRAM when under pressure
+
+[This drm/ttm patch](https://pixelcluster.github.io/VRAM-Mgmt-fixed/) prioritizes keeping protected (pinned) GPU workloads in VRAM under memory pressure.
+
+Without it, the kernel can evict active game assets to system RAM when VRAM fills up.
+The result is a stutter as the GPU driver re-uploads data.
+
+With the patch, the eviction policy prefers unpinned allocations (idle textures, shader caches from closed apps) before touching active game data.
+
+## Other patches
+
+- **Posted MSI by default**: lower PCIe interrupt latency for GPU IRQs
+- **Lazy RSS stat**: faster `fork`/`exec` for single-threaded tasks (game launchers, shaders)
+- **`max_map_count = INT_MAX`**: prevents VMA exhaustion in games that map thousands of regions (some Unity/Unreal titles)
+- **Socket buffer 4×**: `net.core.rmem_default` and `wmem_default` bumped — better online game performance on high-BDP links
+- **`sched_yield` rate-limit**: Proton/Wine games that call `sched_yield` in tight loops no longer monopolize a core; yield is capped to once per jiffy
+- **Shared libraries below PIE**: improves code/library cache locality on `amd64` — compiler and libc share cache lines better
+
+## Config highlights
+
+    PREEMPT_FULL          # full kernel preemption
+    HZ=1000               # 1 ms timer resolution
+    NO_HZ_FULL            # tickless on designated cores
+    SCHED_EXT             # pluggable scheduler (sched_ext)
+    TRANSPARENT_HUGEPAGE_MADVISE
+    NTSYNC                # Wine NT synchronization primitives
+    LTO_CLANG_THIN        # ThinLTO
+
+`sched_ext` allows loading a BPF program as the scheduler. Useful for experiments without recompiling the kernel.
+
+## Building and installing
+
+    makepkg -si -f
+
+This compiles the kernel using the `PKGBUILD`, runs `make -j$(nproc)`, and installs via `pacman`.
+
+GRUB picks it up automatically. Select it at boot or set it as default in `/etc/default/grub`.
+
+## Useful links
+
+[github.com/mauri870/linux-kernel](https://github.com/mauri870/linux-kernel)
+
+[BORE scheduler](https://github.com/firelzrd/bore-scheduler)
+
+[BBR3](https://github.com/google/bbr/tree/v3)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
