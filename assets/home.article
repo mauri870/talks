@@ -17,5 +17,5 @@ Best,
 * Talks and Articles
 
 {{range .}}
-- [[{{.}}][{{.}}]]
+- [[{{.Filename}}][{{.Title}}{{if .Subtitle}} — {{.Subtitle}}{{end}}]]
 {{end}}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"html/template"
@@ -10,7 +11,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 	txttemplate "text/template"
 
 	"golang.org/x/tools/present"
@@ -62,6 +65,50 @@ func parsePresentTemplate(name string) *template.Template {
 	return t
 }
 
+type slideEntry struct {
+	Filename string
+	Title    string
+	Subtitle string
+	Date     time.Time
+}
+
+func parseSlideDate(s string) time.Time {
+	t, _ := time.Parse("2 Jan 2006", s)
+	return t
+}
+
+func readSlideEntry(fpath string) slideEntry {
+	entry := slideEntry{Filename: filepath.Base(fpath)}
+	f, err := os.Open(fpath)
+	if err != nil {
+		entry.Title = entry.Filename
+		return entry
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if entry.Title == "" {
+			entry.Title = strings.TrimPrefix(line, "# ")
+			continue
+		}
+		if line == "" || strings.HasPrefix(line, "Tags:") || strings.HasPrefix(line, "Summary:") {
+			continue
+		}
+		if t := parseSlideDate(line); !t.IsZero() {
+			entry.Date = t
+			break
+		}
+		if entry.Subtitle == "" {
+			entry.Subtitle = line
+		}
+	}
+	if entry.Title == "" {
+		entry.Title = entry.Filename
+	}
+	return entry
+}
+
 func loadHomeArticle() []byte {
 	const fname = "assets/home.article"
 	fcontents, err := os.ReadFile(fname)
@@ -84,13 +131,17 @@ func loadHomeArticle() []byte {
 		panic(err)
 	}
 
-	pages := append(articles, slides...)
-	for i, s := range pages {
-		pages[i] = filepath.Base(s)
+	all := append(articles, slides...)
+	entries := make([]slideEntry, len(all))
+	for i, s := range all {
+		entries[i] = readSlideEntry(s)
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Date.After(entries[j].Date)
+	})
 
 	var buf bytes.Buffer
-	tmpl.Execute(&buf, pages)
+	tmpl.Execute(&buf, entries)
 
 	doc, err := present.Parse(&buf, fname, 0)
 	if err != nil {
