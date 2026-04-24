@@ -1,0 +1,175 @@
+# Pulsar
+A MapReduce engine with a JavaScript runtime
+Tags: rust, mapreduce, javascript, concurrency, systems
+
+8 Mar 2026
+Mauri de Souza Meneguzzo
+https://github.com/mauri870
+
+## MapReduce in 30 seconds
+
+MapReduce is a programming model for processing large datasets in parallel.
+
+1. **Map** transform each input record into zero or more key-value pairs
+2. **Combine** optional local aggregation before grouping (a mini-reduce)
+3. **Group** collect all values that share a key
+4. **Reduce** aggregate the values for each key into a final result
+5. **Sort** optional ordering of the output
+
+Google coined the term in 2004. Hadoop popularized it. Most modern data pipelines still follow this shape.
+
+## The Node.js problem
+
+JavaScript is a natural scripting layer for data transformation
+
+But Node.js is single-threaded:
+
+- One event loop
+- One CPU core
+- Async concurrency, not parallelism
+
+You can fan out with `worker_threads`, but sharing state across V8 isolates is expensive and error-prone.
+
+## Enter Pulsar
+
+    pulsar -f input_file -s script_file
+
+Define `map`, `combine`, `reduce`, `sort`, and `test` as async functions in JavaScript.
+The engine handles parallelism, grouping, disk spill, and orchestration.
+
+- Reads from stdin or a file
+- Writes NDJSON to stdout
+- Composes naturally with Unix pipes
+- Built in Rust
+
+## JavaScript runtime
+
+Pulsar embeds [LLRT](https://github.com/awslabs/llrt) Amazon's Low Latency Runtime, based on [QuickJS](https://bellard.org/quickjs/).
+
+Why not V8 or SpiderMonkey?
+
+- LLRT starts in under 5 ms (V8 can take 50–200 ms)
+- Smaller binary footprint
+- Supports ES2023: async/await, generators, destructuring, regex unicode properties
+- One VM instance per thread, no shared-memory GC contention
+
+Each Pulsar worker thread runs its own LLRT instance
+
+## Pull-based work-stealing scheduler
+
+Each JS worker thread runs N concurrent async ticks (controlled by `--chunk-size`, default 64).
+
+Every tick independently:
+
+1. Pulls the next line from a shared bounded channel
+2. Calls `map` (and optionally `combine`)
+3. Sends results downstream
+4. Immediately pulls the next line
+
+Workers never wait on each other. A fast worker simply pulls more items.
+The channel is the only synchronisation point
+
+    pulsar -f input.txt -s script.js -j 16 -c 128
+
+## A word count script
+
+    const map = async (line) =>
+      line
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(word => word.length > 0)
+        .map(word => [word, 1]);
+
+    const reduce = async (key, values) => values.length;
+
+    const sort = async (results) =>
+      results.sort((a, b) => a[0].localeCompare(b[0]));
+
+Running on Moby Dick book (21,940 lines):
+
+    $ pulsar -f moby-dick.txt -s wc.js --sort | tail -5
+    aback: 2
+    abaft: 2
+    abandon: 3
+    abandoned: 7
+    abandonedly: 1
+
+## Disk spill
+
+The group phase buffers all values for each key in memory.
+
+For large datasets this can exceed available RAM.
+
+When the in-memory map reaches 1 GiB, Pulsar transparently spills to a [sled](https://github.com/spacejam/sled) embedded B-tree on disk.
+The reduce phase drains from disk the same way it drains from memory
+
+    const GroupStorage::Memory(HashMap<String, Vec<Value>>)
+    const GroupStorage::Sled(sled::Db)           // spills here at 1 GiB
+
+This means Pulsar can process datasets larger than RAM without OOM-killing.
+
+## Streaming I/O
+
+Input and output are fully streaming. Pulsar never loads the entire file into memory.
+
+    $ docker run --rm mingrammer/flog -n 10000 \
+        | pulsar -s access-log-script.js
+
+Pulsar can be wired into a pipeline with `socat` for a minimal streaming server:
+
+    $ socat TCP-LISTEN:1234,reuseaddr,fork \
+        EXEC:"pulsar -s script.js --output=json"
+
+## Log analysis example
+
+    const map = async (line) => {
+      const match = line.match(/"\w+ \S+ \S+" (\d{3}) \d+/);
+      return match?.[1] ? [[match[1], 1]] : [];
+    };
+
+    const reduce = async (key, values) =>
+      values.reduce((sum, n) => sum + n, 0);
+
+    $ pulsar -f access.log -s log.js
+    200: 487
+    301: 52
+    404: 43
+    500: 11
+
+## Built-in test runner
+
+Each script is self-contained and can export an async `test()` function.
+
+    const test = async () => {
+        await (async () => {
+            const input = [
+                ["apple", 1],
+                ["banana", 1],
+                ["apple", 1]
+            ];
+            const want = [["apple", 2], ["banana", 1]];
+            const combined = await combine(input);
+            if (str(combined) !== str(want)) {
+                throw new Error(`Combine test failed: expected ${str(want)}, got ${str(combined)}`);
+            }
+        })();
+    };
+
+Then test with:
+
+    $ pulsar -s wc.js --test
+    OK
+
+## Useful links
+
+[github.com/mauri870/pulsar](https://github.com/mauri870/pulsar)
+
+[LLRT, Amazon's Low Latency Runtime](https://github.com/awslabs/llrt)
+
+[sled, embedded key-value store](https://github.com/spacejam/sled)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
