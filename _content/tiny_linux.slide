@@ -1,0 +1,125 @@
+# tiny-linux
+Running Linux in your browser
+Tags: linux, wasm, v86, busybox, kernel, browser
+
+14 Sep 2025
+Mauri de Souza Meneguzzo
+https://github.com/mauri870
+
+## Emulate all the things!
+
+Bare minimal Linux Kernel + Busybox userspace, emulated with v86
+
+[linux.mauri870.com](https://linux.mauri870.com)
+
+Three static files served over HTTP: `bzImage`, `init.cpio.lzma`, `index.html`.
+
+## v86: an x86 PC in WebAssembly
+
+[v86](https://github.com/copy/v86) emulates an x86 PC entirely in WebAssembly.
+
+It emulates:
+- x86-32 CPU (real mode, protected mode, segmentation, paging)
+- SeaBIOS and VGA BIOS
+- PCI bus, PS/2 keyboard, serial port, virtio block devices
+- Enough of a UART to run a Linux console
+
+The emulator speaks to the user via **xterm.js**, a full terminal emulator in the browser.
+
+## Building the kernel
+
+The kernel is compiled from source with Clang/LLVM:
+
+    cp linux.config linux/.config
+    cd linux && make LLVM=1 -j $(nproc)
+    cp arch/x86/boot/bzImage ../build/bzImage
+
+A minimal `linux.config`, no modules, no drivers for hardware that doesn't exist in v86, just enough to boot and mount an initramfs:
+
+- 386
+- `CONFIG_SERIAL_8250` — UART console (ttyS0)
+- `CONFIG_VIRTIO_BLK` — block device (if you want a disk)
+- `CONFIG_INITRAMFS_SOURCE` — embed or load initramfs
+- No networking stack, no USB, no audio — keeps the image small
+
+Compressed kernel image comes out around 3 MB.
+
+## BusyBox: a whole userspace in one binary
+
+[BusyBox](https://busybox.net) bundles `sh`, `ls`, `cat`, `grep`, `vi`, `top`, `ps`, `getty`, `init`, and hundreds more into a single statically-linked executable.
+
+    cp busybox.config busybox/.config
+    cd busybox && make CC=clang -j $(nproc)
+
+Each applet is just a symlink to the `busybox` binary:
+
+    cd build/initramfs && ln -f busybox sh
+
+Configuration selects only the tools that fit in ~2 MB. The final binary is stripped.
+
+## Building the initramfs
+
+An initramfs is the root filesystem the kernel mounts before pivoting to the real root.
+For tiny-linux, it *is* the real root, there is no disk.
+
+    find . | cpio -H newc -o | lzma > ../init.cpio.lzma
+
+- `cpio -H newc`: the "new portable" archive format the kernel expects
+- `lzma`: compressed — the kernel decompresses it during boot
+- Kernel loads it directly from the `initrd` memory region
+
+The rootfs layout:
+
+    /bin/busybox    # the multi-call binary
+    /bin/sh         # symlink → busybox
+    /etc/inittab    # getty on ttyS0
+    /etc/passwd
+    /proc /sys /dev /tmp
+
+## init and the boot sequence
+
+The kernel hands control to `/init` after mounting the initramfs.
+
+The emulator boots the kernel, which writes to `ttyS0`, which becomes xterm.js output.
+Keypresses go from xterm.js → v86 serial port → kernel UART driver → getty → sh.
+
+## Testing with QEMU
+
+Before shipping to the browser, you can test the image locally:
+
+    qemu-system-x86_64 \
+        -kernel build/bzImage \
+        -initrd build/init.cpio.lzma
+
+QEMU and v86 both load the same `bzImage` + `initramfs`. If it boots in QEMU, it boots in the browser.
+
+This cuts the iteration cycle, no need to rebuild the browser bundle every time.
+
+## Serving it
+
+The final build output is three files:
+
+    build/
+      bzImage         # compressed kernel (~955 KB)
+      init.cpio.lzma  # initramfs (1.1 MB)
+      index.html      # the browser glue, v86 wasm, xterm.js
+
+    cd build && npx http-server
+
+Point a browser at `localhost:8080`. The kernel boots in about two seconds.
+
+## Useful links
+
+Live Demo [linux.mauri870.com](https://linux.mauri870.com)
+
+GitHub Repo [github.com/mauri870/tiny-linux](https://github.com/mauri870/tiny-linux)
+
+[Linux Kernel](https://kernel.org/)
+
+[V86 x86 cpu emulator](https://github.com/copy/v86)
+
+[BusyBox Userspace](https://busybox.net)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
