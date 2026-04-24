@@ -1,0 +1,152 @@
+# sync/atomic.And and Or
+Implementing bitwise atomic operations in Go
+Tags: go, atomic, assembly, open source, contributing
+
+12 Jan 2025
+Mauri de Souza Meneguzzo
+https://github.com/mauri870
+
+## The problem
+
+Go's `sync/atomic` package has always had `Add`, `Swap`, `CompareAndSwap`, and `Load`/`Store`.
+
+But no bitwise operations.
+
+Setting a flag used to look like this:
+
+    for {
+        old := atomic.LoadUint32(&flags)
+        if atomic.CompareAndSwapUint32(&flags, old, old|0x4) {
+            break
+        }
+    }
+
+This is a CAS loop. Under contention it spins, wastes CPU cycles, and generates unnecessary retries.
+
+## Why does this matter?
+
+CAS loops are not equivalent to a hardware atomic bitwise instruction.
+
+- A hardware `LOCK OR` completes in one bus transaction.
+- A CAS loop can spin many times under high contention, burning CPU cycles.
+- The compiler cannot intrinsify a CAS loop into a native instruction.
+
+Real packages in the wild use this pattern: `sync`, `net/http`, runtime internals, `os`.
+
+## The proposal
+
+[Issue #61395](https://github.com/golang/go/issues/61395): add `And` and `Or` to `sync/atomic`
+
+New API surface:
+
+    func AndInt32(addr *int32, mask int32) (old int32)
+    func AndInt64(addr *int64, mask int64) (old int64)
+    func AndUint32(addr *uint32, mask uint32) (old uint32)
+    func AndUint64(addr *uint64, mask uint64) (old uint64)
+    func AndUintptr(addr *uintptr, mask uintptr) (old uintptr)
+
+    func OrInt32(addr *int32, mask int32) (old int32)
+    func OrInt64(addr *int64, mask int64) (old int64)
+    func OrUint32(addr *uint32, mask uint32) (old uint32)
+    func OrUint64(addr *uint64, mask uint64) (old uint64)
+    func OrUintptr(addr *uintptr, mask uintptr) (old uintptr)
+
+Also available as methods on `atomic.Int32`, `atomic.Int64`, `atomic.Uint32`, `atomic.Uint64`, `atomic.Uintptr`.
+
+## After
+
+    // Before: CAS loop, spins under contention
+    for {
+        old := atomic.LoadUint32(&flags)
+        if atomic.CompareAndSwapUint32(&flags, old, old|0x4) {
+            break
+        }
+    }
+
+    // After: one instruction, no spinning
+    atomic.OrUint32(&flags, 0x4)
+
+## Architecture coverage
+
+Go supports many platforms. Every new operation needs assembly on all of them.
+
+Architectures covered:
+
+- amd64/386 `LOCK CMPXCHGL`
+- arm64 `LDADD`, `STLR` with load-exclusive/store-exclusive
+- arm `STREX` loop (no hardware atomic bitwise on ARMv7)
+- ppc64 / ppc64le — `LDARX`/`STDCX.` reservation loop
+- s390x `LAO`, `LAN` (Load And Or/And)
+- mips / mipsle `LL`/`SC` (Load Linked/Store Conditional) loop
+- wasm sequential; wasm is single-threaded
+- And others...
+
+Multiple architectures. Lots of assembly.
+
+## amd64 example
+
+amd64 has native:
+
+    // func And32(addr *uint32, v uint32) old uint32
+    TEXT ·And32(SB), NOSPLIT, $0-20
+        MOVQ	ptr+0(FP), BX
+        MOVL	val+8(FP), CX
+    casloop:
+        MOVL 	CX, DX
+        MOVL	(BX), AX
+        ANDL	AX, DX
+        LOCK
+        CMPXCHGL	DX, (BX)
+        JNZ casloop
+        MOVL 	AX, ret+16(FP)
+        RET
+
+## Race detector integration
+
+Go's race detector wraps every memory access with calls into TSAN (ThreadSanitizer).
+
+Atomic operations need to be reported as `tsan_atomic` calls, not plain read/write, otherwise the detector generates false positives.
+
+Each new operation needed a corresponding entry in `race_amd64.s` and a wrapper in `race.go` that routes through `runtime.racecall`.
+
+    // And
+    TEXT	sync∕atomic·AndInt32(SB), NOSPLIT, $0-20
+        GO_ARGS
+        MOVD	$__tsan_go_atomic32_fetch_and(SB), R9
+        BL	racecallatomic<>(SB)
+        RET
+
+## Compiler intrinsics
+
+The compiler can lower `sync/atomic.OrUint32` to a single atomic instruction.
+
+This required adding intrinsic entries to the SSA backend.
+
+With the intrinsic in place, the compiler emits the instruction inline with no call overhead, no stack frame.
+
+## Performance
+
+50–90% faster than CAS loops under contention.
+
+## Merged
+
+- [CL 528315](https://go-review.googlesource.com/c/go/+/528315) — `runtime/internal/atomic`: And/Or for amd64/386
+- [CL 544455](https://go-review.googlesource.com/c/go/+/544455) — `sync/atomic`: public API, race support
+
+Shipped in Go 1.23 and 1.24.
+
+Nominated for the [Google Open Source Peer Award](https://opensource.googleblog.com/2024/06/google-open-source-peer-bonus-program-first-group-2024-recipients.html) in 2024 because of this work.
+
+Now code owner for runtime and atomic packages in the stdlib [https://dev.golang.org/owners](https://dev.golang.org/owners)
+
+## Useful links
+
+[Proposal #61395](https://github.com/golang/go/issues/61395)
+
+[My CLs on Gerrit](https://go.mauri870.com)
+
+[sync/atomic package docs](https://pkg.go.dev/sync/atomic)
+
+My talks are written with [golang.org/x/tools/present](https://pkg.go.dev/golang.org/x/tools/present)
+
+Find this talk at [talks.mauri870.com](https://talks.mauri870.com)
